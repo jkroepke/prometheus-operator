@@ -1,0 +1,39 @@
+name: Temporary finalizer bundle regeneration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'test-finalizer-bundle'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout scratch branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: test-finalizer-bundle
+          fetch-depth: 0
+
+      - name: Regenerate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          make generate
+          git diff --check
+          test "$(git diff --name-only)" = "bundle.yaml"
+          git diff -- bundle.yaml
+
+      - name: Commit generated bundle and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/temp-finalizer-bundle.yml
+          git config user.name "Jan-Otto Kröpke"
+          git config user.email "mail@jkroepke.de"
+          git add bundle.yaml .github/workflows/temp-finalizer-bundle.yml
+          git commit --signoff -m "rbac: regenerate finalizer bundle"
+          git push origin HEAD:test-finalizer-bundle

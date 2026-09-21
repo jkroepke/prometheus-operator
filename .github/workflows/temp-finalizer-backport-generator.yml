@@ -1,0 +1,71 @@
+name: Temporary finalizer backport generator
+
+on:
+  push:
+    branches:
+      - main
+  issues:
+    types:
+      - opened
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.event_name == 'push' || github.event.issue.title == 'tmp-finalizer-bundle-patch-8830'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix-finalizer-update-rbac
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.3'
+
+      - name: Generate files
+        run: make generate
+
+      - name: Verify generated diff
+        shell: bash
+        run: |
+          git diff --check
+          python3 - <<'PY'
+          import subprocess
+
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only"], text=True
+          ).splitlines())
+          allowed = {
+              "Documentation/platform/prometheus-agent.md",
+              "Documentation/platform/rbac.md",
+              "bundle.yaml",
+              "example/rbac/prometheus-operator/prometheus-operator-cluster-role.yaml",
+          }
+          if "bundle.yaml" not in changed:
+              raise SystemExit(f"bundle.yaml was not regenerated: {sorted(changed)}")
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected generated files: {sorted(unexpected)}")
+          PY
+
+      - name: Commit generated changes
+        shell: bash
+        run: |
+          rm -f .github/workflows/temp-finalizer-backport.yml
+          rm -f .github/workflows/tmp-finalizer-rbac-fix.yaml
+          git config user.name "Jan-Otto Kröpke"
+          git config user.email "mail@jkroepke.de"
+          git add \
+            Documentation/platform/prometheus-agent.md \
+            Documentation/platform/rbac.md \
+            bundle.yaml \
+            example/rbac/prometheus-operator/prometheus-operator-cluster-role.yaml \
+            .github/workflows/temp-finalizer-backport.yml \
+            .github/workflows/tmp-finalizer-rbac-fix.yaml
+          git commit --signoff -m "rbac: regenerate finalizer permissions"
+          git push origin HEAD:fix-finalizer-update-rbac

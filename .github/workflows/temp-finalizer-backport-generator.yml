@@ -7,13 +7,16 @@ on:
   issues:
     types:
       - opened
+  pull_request:
+    types:
+      - opened
 
 permissions:
   contents: write
 
 jobs:
   generate:
-    if: github.event_name == 'push' || github.event.issue.title == 'tmp-finalizer-bundle-patch-8830'
+    if: github.event_name == 'push' || (github.event_name == 'issues' && github.event.issue.title == 'tmp-finalizer-bundle-patch-8830') || (github.event_name == 'pull_request' && github.event.pull_request.title == 'tmp-finalizer-bundle-patch-8830')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout target branch
